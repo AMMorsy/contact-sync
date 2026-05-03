@@ -1,0 +1,35 @@
+# Sensitive data — NEVER commit real credentials
+config/accounts/*.json
+config/settings.json
+credentials/*.json
+!credentials/*.example.json
+!config/*.example.json
+
+# Database
+data/*.db
+data/sync.lock
+
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Backups
+backups/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE & local tooling
+.idea/
+.vscode/

@@ -1,0 +1,33 @@
+{
+  "airtable": {
+    "token": "YOUR_AIRTABLE_TOKEN_HERE",
+    "base_id": "YOUR_AIRTABLE_BASE_ID",
+    "table_id": "YOUR_AIRTABLE_TABLE_ID"
+  },
+  "google_accounts": [
+    {
+      "id": "account_1",
+      "label": "PrimaryAccount",
+      "email": "your-email@gmail.com",
+      "credentials_file": "credentials/google_client_secret.json",
+      "token_file": "config/accounts/account_1.json",
+      "redirect_uri": "http://localhost:8085",
+      "sync_source_label": "Google Account 1",
+      "active": true
+    }
+  ],
+  "sync": {
+    "page_size": 200,
+    "airtable_batch_size": 10,
+    "google_request_delay_seconds": 1,
+    "airtable_request_delay_seconds": 0.25,
+    "max_retries": 5,
+    "retry_backoff_seconds": 2,
+    "default_country_code": "+27"
+  },
+  "safety": {
+    "google_write_enabled": true,
+    "google_delete_enabled": true,
+    "dry_run": false
+  }
+}
