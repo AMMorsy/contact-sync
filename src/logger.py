@@ -2,12 +2,7 @@ import logging
 import os
 from logging.handlers import TimedRotatingFileHandler
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_DIR = os.environ.get(
-    "CONTACT_SYNC_LOG_DIR",
-    os.path.join(PROJECT_ROOT, "logs")
-)
-os.makedirs(LOG_DIR, exist_ok=True)
+LOG_DIR = "/root/contact-sync/logs"
 
 def get_logger(name="contact-sync"):
     logger = logging.getLogger(name)

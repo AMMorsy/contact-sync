@@ -33,3 +33,11 @@ Thumbs.db
 # IDE & local tooling
 .idea/
 .vscode/
+
+# Dashboard
+dashboard/config.json
+dashboard/data/
+dashboard/logs/
+dashboard/venv/
+dashboard/__pycache__/
+dashboard/**/__pycache__/

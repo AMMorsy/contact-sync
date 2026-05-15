@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy this file to config.json and fill in real values. config.json is gitignored.",
+
+  "password": "CHANGE_ME_LONG_RANDOM_STRING",
+  "secret_key": "CHANGE_ME_ANOTHER_LONG_RANDOM_STRING",
+  "session_hours": 24,
+  "refresh_seconds": 30,
+  "url_prefix": "/dashboard",
+
+  "_synology_backup_check_comment": "Optional — only if backups.py monitors a Synology NAS over SSH",
+  "synology_user": "backup_user",
+  "synology_ip": "192.168.1.10",
+  "synology_ssh_key": "~/.ssh/backup_key"
+}

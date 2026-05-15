@@ -1,5 +1,5 @@
 from normalizer import normalize_contact
-from state_manager import upsert_dedup_cache, flag_duplicate, record_sync_write
+from state_manager import get_last_sync_writes, upsert_dedup_cache, flag_duplicate, record_sync_write
 from logger import get_logger
 from datetime import datetime, timezone
 from rapidfuzz import fuzz
@@ -43,21 +43,49 @@ def fields_have_changed(existing_fields, new_fields):
     return False
 
 
-def build_minimal_patch(existing_fields, new_fields):
+def build_minimal_patch(existing_fields, new_fields, record_id=None):
     """Build a patch dict containing ONLY the fields that differ.
-    This makes Direction 1 truly idempotent — never touches fields that
-    are already correct, never overwrites unrelated fields."""
-    # Only these fields can be patched by Direction 1 (Google -> Airtable):
-    # First Name, Last Name, Clean Email, Google Contact ID, Origin, Sync Source,
-    # Last Synced At, Sync Lock. Phone fields are dedup keys — Origin, Sync Source
-    # only set on insert.
-    patchable = ["First Name", "Last Name", "Clean Email", "Google Contact ID"]
+
+    USER-EDIT PROTECTION: Only First Name and Last Name are user-editable
+    fields that matter for Google sync. For these, check sync_writes to detect
+    if the user edited Airtable since our last write — if so, don't overwrite.
+
+    Other fields (Google Contact ID, Clean Email) are system fields that the
+    user does not edit directly, so they update freely whenever Google differs."""
+    from state_manager import get_last_sync_writes
+
+    # User-editable fields (must be protected from overwrite)
+    user_editable = ["First Name", "Last Name"]
+    # System fields (update freely from Google)
+    system_fields = ["Clean Email", "Google Contact ID"]
+
+    last_writes = get_last_sync_writes(record_id) if record_id else {}
     patch = {}
-    for key in patchable:
+
+    # User-editable: protect from overwrite if user edited since last sync write
+    for key in user_editable:
         existing = (existing_fields.get(key) or "").strip()
-        new      = (new_fields.get(key) or "").strip()
+        new      = (new_fields.get(key)      or "").strip()
+        if existing == new:
+            continue
+        if last_writes:
+            last_value = (last_writes.get(key) or "").strip()
+            if existing != last_value:
+                # User edited Airtable since our last write — protect it
+                logger.info(
+                    f"[D1 SKIP] {record_id} field '{key}': Airtable user edit "
+                    f"({existing!r}) vs last_write ({last_value!r}); preserving"
+                )
+                continue
+        patch[key] = new_fields.get(key, "")
+
+    # System fields: just update if different
+    for key in system_fields:
+        existing = (existing_fields.get(key) or "").strip()
+        new      = (new_fields.get(key)      or "").strip()
         if existing != new:
             patch[key] = new_fields.get(key, "")
+
     # Always update sync metadata
     patch["Sync Source"]    = new_fields.get("Sync Source", "Google Account 1")
     patch["Last Synced At"] = new_fields.get("Last Synced At")
@@ -199,6 +227,9 @@ def process_contacts(raw_contacts, airtable_client, account, dry_run=False):
                     result = airtable_client.create_record(fields)
                     new_id = result.get("id")
                     if new_id:
+                        # Invalidate cache so Direction 2 sees fresh data
+                        if hasattr(airtable_client, '_records_cache'):
+                            del airtable_client._records_cache
                         # Record what we just wrote so watcher won't re-trigger
                         record_sync_write(new_id, {
                             "First Name": fields.get("First Name", ""),
@@ -233,17 +264,43 @@ def process_contacts(raw_contacts, airtable_client, account, dry_run=False):
 
                     if fields_have_changed(existing_fields, fields):
                         # Build minimal patch — only fields that actually differ
-                        patch_fields = build_minimal_patch(existing_fields, fields)
+                        patch_fields = build_minimal_patch(existing_fields, fields, record_id=record_id)
                         airtable_client.patch_record(record_id, patch_fields)
+                        # Invalidate cache so Direction 2 sees fresh data
+                        if hasattr(airtable_client, '_records_cache'):
+                            del airtable_client._records_cache
                         # Record what we just wrote so watcher won't re-trigger.
-                        # Use the FINAL values (post-patch) for tracking.
-                        merged = {**existing_fields, **patch_fields}
-                        record_sync_write(record_id, {
-                            "First Name":  merged.get("First Name", ""),
-                            "Last Name":   merged.get("Last Name", ""),
-                            "Dedup Phone": merged.get("Dedup Phone", ""),
-                            "Email":       merged.get("Email") or merged.get("Clean Email", "")
-                        })
+                        # IMPORTANT: only update sync_writes for fields the script
+                        # ACTUALLY wrote (those in patch_fields). Fields that were
+                        # skipped by build_minimal_patch (D1 SKIP — user edits we
+                        # preserved) must keep their OLD sync_writes value so the
+                        # watcher still sees them as pending user edits to push.
+                        prior = get_last_sync_writes(record_id) or {}
+                        updates = {}
+                        # Watcher fields: First Name, Last Name, Dedup Phone, Email
+                        # For each, use patched value if patched, else keep prior (or current Airtable if no prior)
+                        for field, getter in [
+                            ("First Name", lambda: existing_fields.get("First Name", "")),
+                            ("Last Name",  lambda: existing_fields.get("Last Name", "")),
+                        ]:
+                            if field in patch_fields:
+                                updates[field] = patch_fields[field]
+                            else:
+                                # Field was skipped (user edit) — keep prior sync_writes value
+                                # so watcher still detects the pending push
+                                if field in prior:
+                                    updates[field] = prior[field]
+                                # else leave it absent; record_sync_write will not touch it
+                        # Dedup Phone — Direction 1 never patches this, but track current Airtable value
+                        updates["Dedup Phone"] = existing_fields.get("Dedup Phone", "")
+                        # Email — Direction 1 patches Clean Email, but watcher tracks "Email"
+                        if "Clean Email" in patch_fields:
+                            updates["Email"] = patch_fields["Clean Email"]
+                        elif "Email" in prior:
+                            updates["Email"] = prior["Email"]
+                        else:
+                            updates["Email"] = existing_fields.get("Email", "") or existing_fields.get("Clean Email", "")
+                        record_sync_write(record_id, updates)
                         if contact.get("dedup_phone"):
                             upsert_dedup_cache(
                                 contact["dedup_phone"],

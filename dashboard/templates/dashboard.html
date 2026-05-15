@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block body %}
+{% set status_palette = {
+    'green':  {'dot': 'bg-emerald-500',  'card': 'border-emerald-200 bg-emerald-50',  'text': 'text-emerald-700'},
+    'yellow': {'dot': 'bg-amber-500',    'card': 'border-amber-200 bg-amber-50',    'text': 'text-amber-700'},
+    'red':    {'dot': 'bg-rose-500',     'card': 'border-rose-200 bg-rose-50',     'text': 'text-rose-700'},
+    'gray':   {'dot': 'bg-slate-400',    'card': 'border-slate-200 bg-slate-50',   'text': 'text-slate-600'}
+} %}
+{% set overall = status_palette[health.overall_status] %}
+{% set compare = health.raw.compare if health.raw and health.raw.compare else {} %}
+
+<div class="max-w-6xl mx-auto p-6 sm:p-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-900">Sync Dashboard</h1>
+      <p class="text-sm text-slate-500 mt-1">Live system status · refreshes every {{ refresh }}s</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="window.location.reload()" class="text-sm text-slate-500 hover:text-slate-900">Refresh now</button>
+      <span class="text-slate-300">·</span>
+      <a href="{{ url_for('dashboard.logout') }}" class="text-sm text-slate-500 hover:text-slate-900">Sign out</a>
+    </div>
+  </div>
+
+  <!-- Overall health banner -->
+  <div class="rounded-2xl border {{ overall.card }} p-6 shadow-sm mb-6">
+    <div class="flex items-start gap-4">
+      <div class="w-3 h-3 mt-2 rounded-full {{ overall.dot }} flex-shrink-0"></div>
+      <div class="flex-1">
+        <div class="text-xl font-medium {{ overall.text }}">{{ health.overall_label }}</div>
+        <div class="text-sm text-slate-600 mt-1">{{ health.overall_summary }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  {% if health.alerts %}
+  <div class="mb-8 space-y-2">
+    {% for alert in health.alerts %}
+    {% set p = status_palette[alert.severity] %}
+    <div class="rounded-xl border {{ p.card }} p-4 flex items-start gap-3">
+      <div class="w-2 h-2 mt-1.5 rounded-full {{ p.dot }} flex-shrink-0"></div>
+      <div class="flex-1">
+        <div class="text-sm font-medium {{ p.text }} capitalize">{{ alert.area }}</div>
+        <div class="text-sm text-slate-700 mt-0.5">{{ alert.message }}</div>
+        {% if alert.action %}
+        <div class="text-xs text-slate-500 mt-1.5"><span class="font-medium">Suggested action:</span> {{ alert.action }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Quick numbers -->
+  {% if compare.get('available') %}
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-wide">Airtable</div>
+      <div class="text-2xl font-semibold text-slate-900 mt-1">{{ "{:,}".format(compare.airtable_count) }}</div>
+    </div>
+    <div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-wide">Google</div>
+      <div class="text-2xl font-semibold text-slate-900 mt-1">{{ "{:,}".format(compare.google_count) }}</div>
+    </div>
+    <div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-wide">Matched</div>
+      <div class="text-2xl font-semibold text-slate-900 mt-1">{{ "{:,}".format(compare.matched_pairs) }}</div>
+    </div>
+    <div class="bg-white rounded-xl border border-slate-200 p-4">
+      <div class="text-xs text-slate-500 uppercase tracking-wide">Mismatched</div>
+      <div class="text-2xl font-semibold {% if compare.mismatch_count > 0 %}text-amber-600{% else %}text-emerald-600{% endif %} mt-1">{{ compare.mismatch_count }}</div>
+    </div>
+  </div>
+  <div class="text-xs text-slate-400 mb-8 -mt-4">Counts last updated {{ compare.age_minutes }} min ago</div>
+  {% endif %}
+
+  <!-- Components -->
+  <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wide mb-4">System Components</h2>
+    <div class="divide-y divide-slate-100">
+      {% for c in health.components %}
+      {% set cp = status_palette[c.status] %}
+      <div class="py-3 flex items-center gap-3">
+        <div class="w-2 h-2 rounded-full {{ cp.dot }} flex-shrink-0"></div>
+        <div class="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+          <div class="text-sm font-medium text-slate-900">{{ c.name }}</div>
+          <div class="text-sm text-slate-500">{{ c.message }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="mt-6 text-xs text-slate-400 text-center">
+    Read-only dashboard · No changes can be made from this interface
+  </div>
+  <div class="mt-2 text-xs text-slate-400 text-center">
+    Designed and developed by <span class="font-medium text-slate-500">Eng. Ahmed Morsy</span>
+  </div>
+</div>
+
+<script>
+  setTimeout(() => window.location.reload(), {{ refresh }} * 1000);
+</script>
+{% endblock %}

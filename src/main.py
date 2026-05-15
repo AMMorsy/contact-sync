@@ -1,31 +1,18 @@
 import sys
 import os
 import json
+import fcntl
 import subprocess
 import signal
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "settings.json")
-LOCK_FILE = os.path.join(PROJECT_ROOT, "data", "sync.lock")
-MAIN_SCRIPT_PATH = os.path.join(PROJECT_ROOT, "src", "main.py")
-
-# fcntl is Unix-only — provide a no-op fallback on Windows
-try:
-    import fcntl
-    HAS_FCNTL = True
-except ImportError:
-    fcntl = None
-    HAS_FCNTL = False
-
 
 def kill_stuck_processes(max_age_minutes=20):
-    """Kill ALL OTHER python main.py processes — only ONE run should ever
+    """Kill ALL OTHER python3 main.py processes — only ONE run should ever
     be active at a time. Also kill the parent shell if it's a cron wrapper.
-    Then remove the stale lock file so the new run can acquire it cleanly.
-    No-op on Windows (relies on `ps`)."""
+    Then remove the stale lock file so the new run can acquire it cleanly."""
     try:
         my_pid = os.getpid()
         my_ppid = os.getppid()
@@ -48,8 +35,8 @@ def kill_stuck_processes(max_age_minutes=20):
                 continue
             if pid == my_pid or pid == my_ppid:
                 continue
-            is_main_py = ('python' in cmd and 'src/main.py' in cmd)
-            is_cron_wrapper = ('src/main.py' in cmd and '/bin/sh' in cmd)
+            is_main_py = ('python3' in cmd and '/root/contact-sync/src/main.py' in cmd)
+            is_cron_wrapper = ('contact-sync/src/main.py' in cmd and '/bin/sh' in cmd)
             if (is_main_py or is_cron_wrapper) and etimes > max_seconds:
                 print(f"[STUCK PROTECTION] Killing PID {pid} (running {etimes}s): {cmd[:80]}")
                 try:
@@ -60,7 +47,7 @@ def kill_stuck_processes(max_age_minutes=20):
         if killed_any:
             time.sleep(2)
             try:
-                os.remove(LOCK_FILE)
+                os.remove("/root/contact-sync/data/sync.lock")
                 print("[STUCK PROTECTION] Removed stale lock file")
             except FileNotFoundError:
                 pass
@@ -84,6 +71,9 @@ from push_engine import run_push
 from delete_engine import run_delete_sync
 
 logger = get_logger()
+
+CONFIG_PATH = "/root/contact-sync/config/settings.json"
+LOCK_FILE = "/root/contact-sync/data/sync.lock"
 
 # ============================================================
 # GLOBAL SCRIPT TIMEOUT — kill self if running longer than this
@@ -113,15 +103,13 @@ def load_config():
 
 def main():
     # Prevent overlapping runs
-    os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
     lock_file = open(LOCK_FILE, "w")
-    if HAS_FCNTL:
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except IOError:
-            logger.warning("Another sync is already running. Skipping this run.")
-            lock_file.close()
-            return
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        logger.warning("Another sync is already running. Skipping this run.")
+        lock_file.close()
+        return
 
     logger.info("=" * 60)
     logger.info("Contact Sync Started")
@@ -131,8 +119,7 @@ def main():
         config = load_config()
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
-        if HAS_FCNTL:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
         lock_file.close()
         sys.exit(1)
 
@@ -255,8 +242,7 @@ def main():
     logger.info("Contact Sync Finished")
     logger.info("=" * 60)
 
-    if HAS_FCNTL:
-        fcntl.flock(lock_file, fcntl.LOCK_UN)
+    fcntl.flock(lock_file, fcntl.LOCK_UN)
     lock_file.close()
 
 if __name__ == "__main__":

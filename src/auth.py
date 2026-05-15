@@ -16,7 +16,6 @@ os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 def get_credentials(account):
     token_file = account["token_file"]
     credentials_file = account["credentials_file"]
-    redirect_uri = account.get("redirect_uri", "http://localhost:8085")
     creds = None
     if os.path.exists(token_file):
         creds = Credentials.from_authorized_user_file(token_file, SCOPES)
@@ -32,7 +31,7 @@ def get_credentials(account):
         flow = Flow.from_client_secrets_file(
             credentials_file,
             scopes=SCOPES,
-            redirect_uri=redirect_uri
+            redirect_uri=config.get("oauth_redirect_uri", "http://localhost:8085")
         )
         auth_url, _ = flow.authorization_url(
             access_type="offline",

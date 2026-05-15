@@ -2,14 +2,9 @@ import sqlite3
 import os
 from datetime import datetime
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.environ.get(
-    "CONTACT_SYNC_DB_PATH",
-    os.path.join(PROJECT_ROOT, "data", "sync_state.db")
-)
+DB_PATH = "/root/contact-sync/data/sync_state.db"
 
 def get_connection():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -57,25 +52,6 @@ def initialize_db():
             match_type TEXT,
             flagged_at TEXT,
             resolved INTEGER DEFAULT 0
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS known_records (
-            id TEXT,
-            record_type TEXT,
-            airtable_id TEXT,
-            google_id TEXT,
-            last_seen TEXT,
-            PRIMARY KEY (id, record_type)
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS sync_writes (
-            airtable_record_id TEXT,
-            field_name TEXT,
-            last_written_value TEXT,
-            written_at TEXT,
-            PRIMARY KEY (airtable_record_id, field_name)
         )
     """)
     conn.commit()
